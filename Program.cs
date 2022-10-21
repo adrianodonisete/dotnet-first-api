@@ -11,15 +11,16 @@ var configuration = app.Configuration;
 ProductRepository.Init(configuration);
 
 
-
-app.MapGet("/products", () =>
+// all
+app.MapGet("/products", (ApplicationDbContext context) =>
 {
-    return Results.Ok(new { products = ProductRepository.Products });
+    return Results.Ok(new { products = context.Products });
 });
 
+// create
 app.MapPost("/products", (ProductRequest prodRequest, ApplicationDbContext context) =>
 {
-    var category = context.Categories.Where(c => c.Id == prodRequest.CategoryId).First();
+    var category = context.Categories.Where(c => c.Id == prodRequest.CategoryId).FirstOrDefault();
 
     var product = new Product
     {
@@ -43,47 +44,82 @@ app.MapPost("/products", (ProductRequest prodRequest, ApplicationDbContext conte
     return Results.Created($"/products/{product.Id}", new { product = product });
 });
 
+// get one
 app.MapGet("/products/{id}", ([FromRoute] int id, ApplicationDbContext context) =>
 {
     var productSaved = context.Products
         .Where(p => p.Id == id)
         .Include(p => p.Category)
-        .Include(p => p.Tags);
+        .Include(p => p.Tags)
+        .FirstOrDefault();
+
     if (productSaved == null)
     {
-        // Console.WriteLine("not found");
         return Results.NotFound(new { message = "Not Found" });
     }
-
-
-
 
     return Results.Ok(new { product = productSaved });
 });
 
-app.MapPut("/products/{code}", ([FromRoute] string code, Product product) =>
+// update
+app.MapPut("/products/{id}", ([FromRoute] int id, ProductRequest prodRequest, ApplicationDbContext context) =>
 {
-    var productSaved = ProductRepository.ByCode(code);
+    var productSaved = context.Products
+        .Where(p => p.Id == id)
+        .Include(p => p.Category)
+        .Include(p => p.Tags)
+        .FirstOrDefault();
     if (productSaved == null)
     {
         return Results.NotFound(new { message = "Not Found" });
     }
-    productSaved.Name = product.Name;
+
+    if (prodRequest.Code != null)
+    {
+        productSaved.Code = prodRequest.Code;
+    }
+    if (prodRequest.Name != null)
+    {
+        productSaved.Name = prodRequest.Name;
+    }
+    if (prodRequest.Description != null)
+    {
+        productSaved.Description = prodRequest.Description;
+    }
+    var category = context.Categories.Where(c => c.Id == prodRequest.CategoryId).FirstOrDefault();
+    if (category != null)
+    {
+        productSaved.Category = category;
+    }
+    if (prodRequest.Tags != null)
+    {
+        productSaved.Tags = new List<Tag>();
+        foreach (var tag in prodRequest.Tags)
+        {
+            productSaved.Tags.Add(new Tag { Name = tag });
+        }
+    }
+    context.SaveChanges();
 
     return Results.Ok(new { product = productSaved });
 });
 
-app.MapDelete("/products/{code}", ([FromRoute] string code) =>
+// delete
+app.MapDelete("/products/{id}", ([FromRoute] int id, ApplicationDbContext context) =>
 {
-    var productSaved = ProductRepository.ByCode(code);
+    var productSaved = context.Products
+        .Where(p => p.Id == id)
+        .FirstOrDefault();
     if (productSaved == null)
     {
         return Results.NotFound(new { message = "Not Found" });
     }
 
-    ProductRepository.Remove(productSaved);
+    context.Products.Remove(productSaved);
+    context.SaveChanges();
     return Results.Ok(new { message = "Deleted" });
 });
+
 
 
 // app.com/getproduct/dateIni=1&dateEnd=10
